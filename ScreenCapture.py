@@ -4,27 +4,61 @@ import numpy as np
 
 keyboard = Controller()
 
-left = [886, 252]
-down = [1005, 252]
-up = [1120, 252]
-right = [1239, 252]
-GRAY = [173, 163, 135, 255]
-
 GRAY_LOW = np.array([80, 50, 20])
 GRAY_HIGH = np.array([100, 100, 255])
 
-state = [False, False, False, False]
+PURPLE_LOW = np.array([147, 138, 149])
+PURPLE_HIGH = np.array([168, 188, 255])
+
+BLUE_LOW = np.array([74, 225, 200])
+BLUE_HIGH = np.array([103, 255, 255])
+
+GREEN_LOW = np.array([23, 213, 211])
+GREEN_HIGH = np.array([62, 255, 255])
+
+RED_LOW = np.array([160, 177, 220])
+RED_HIGH = np.array([180, 216, 255])
+
+class AutoPlayer:
+
+    arrows = []
+
+    def __init__(self):
+        self.arrows = get_arrows()
+
+    def play_game(self):
+
+        width = 1600
+        height = 900
+        
+        monitor = {"top": 0, "left": 0, "width": width, "height": height}
+
+        with mss.mss() as sct:
+            
+            while True:
+                img = np.array(sct.grab(monitor))
+
+                for arrow in self.arrows:
+                    if arrow.check_for_color(img):
+                        print(arrow.key)
+                        arrow.press_key()
 
 class Arrow:
 
     box = [0,0,0,0]
     order = -1
     key = ""
+    color_low = [0,0,0]
+    color_high = [180,255,255]
+    area_pixels = 0
 
-    def __init__(self, box, order, key):
+    def __init__(self, box, order, key, color_low, color_high):
         self.box = box
         self.order = order
         self.key = key
+        self.color_low = color_low
+        self.color_high = color_high
+        self.area_pixels = (self.box[1]-self.box[0]) * (self.box[3]-self.box[2])
 
     def __repr__(self):
         return str([self.box, self.order, self.key])
@@ -32,16 +66,39 @@ class Arrow:
     def get_roi(self, img):
         return img[self.box[0]:self.box[1],self.box[2]:self.box[3]]
 
-    #def get_color(self, img):
-        #img[self.]
+    def press_key(self):
 
-def press_release(key):
+        PRESS_TIME = 0.03
+        
+        keyboard.press(self.key)
+        time.sleep(PRESS_TIME)
+        keyboard.release(self.key)
 
-    PRESS_TIME = 0.03
+    def check_for_color(self, img):
+
+        PIXEL_PERCENT_THRESHOLD = 0.15
+        
+        roi = self.get_roi(img)
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, self.color_low, self.color_high)
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        color_pixels = 0
+        for contour in contours: color_pixels += len(contours)
+
+        if color_pixels/self.area_pixels > PIXEL_PERCENT_THRESHOLD: return True
+        else: return False
+
+def take_screenshot():
+    width = 1600
+    height = 900
     
-    keyboard.press(key)
-    time.sleep(PRESS_TIME)
-    keyboard.release(key)
+    monitor = {"top": 0, "left": 0, "width": width, "height": height}
+    
+    with mss.mss() as sct:
+        img = np.array(sct.grab(monitor))
+        return img
 
 def filter_contours(img):
     
@@ -67,6 +124,18 @@ def get_contour_square(contour):
         y_vals.append(contour[i][0][1])
 
     return [min(y_vals), max(y_vals), min(x_vals), max(x_vals)]
+
+def remove_nonsquare_boxes(boxes):
+    new_boxes = []
+
+    for box in boxes:
+        width = box[3] - box[2]
+        height = box[1] - box[0]
+
+        if abs(height-width)/height < 0.1:
+            new_boxes.append(box)
+
+    return new_boxes
         
 def get_arrows():
     
@@ -85,6 +154,7 @@ def get_arrows():
         for contour in contours:
             boxes.append(get_contour_square(contour))
 
+        boxes = remove_nonsquare_boxes(boxes)
         print(boxes)
 
         arrows = []
@@ -102,56 +172,22 @@ def get_arrows():
                         arrows.insert(j+1, boxes[i])
                     elif boxes[i][2] > arrows[j-1][2] and boxes[i][2] < arrows[j][2]:
                         arrows.insert(j, boxes[i])
+                        
+        try:
+            final_arrows = []
+            final_arrows.append(Arrow(arrows[-4], 1, "a", PURPLE_LOW, PURPLE_HIGH))
+            final_arrows.append(Arrow(arrows[-3], 2, "s", BLUE_LOW, BLUE_HIGH))
+            final_arrows.append(Arrow(arrows[-2], 3, "w", GREEN_LOW, GREEN_HIGH))
+            final_arrows.append(Arrow(arrows[-1], 4, "d", RED_LOW, RED_HIGH))
 
-        final_arrows = []
-        final_arrows.append(Arrow(arrows[-4], 1, "a"))
-        final_arrows.append(Arrow(arrows[-3], 2, "s"))
-        final_arrows.append(Arrow(arrows[-2], 3, "w"))
-        final_arrows.append(Arrow(arrows[-1], 4, "d"))
+            return final_arrows
+        
+        except IndexError:
+            print("Can't find enough arrows! :(")
 
-        return final_arrows
+def main():
+    play = AutoPlayer()
+    play.play_game()
 
-# Display the picture
-#cv2.imshow("OpenCV/Numpy normal", img)
-
-#print("fps: {}".format(1 / (time.time() - last_time)))
-
-"""if list(img[left[1]][left[0]]) != GRAY:
-    print("LEFT NOTE")
-    press_release("a")
-    state[0] = True
-else:
-    state[0] = False
-    
-if list(img[down[1]][down[0]]) != GRAY:
-    print("DOWN NOTE")
-    press_release("s")
-    state[1] = True
-else:
-    state[1] = False
-    
-if list(img[up[1]][up[0]]) != GRAY:
-    print("UP NOTE")
-    press_release("w")
-    state[2] = True
-else:
-    state[2] = False
-    
-if list(img[right[1]][right[0]]) != GRAY:
-    print("RIGHT NOTE")
-    press_release("d")
-    state[3] = True
-else:
-    state[3] = False"""
-
-"""def color_equals(c1, c2):
-
-    TOLERANCE = 3
-
-    if (abs(c1[0] - c2[0]) < TOLERANCE and
-        abs(c1[1] - c2[1]) < TOLERANCE and
-        abs(c1[2] - c2[2]) < TOLERANCE and
-        abs(c1[3] - c2[3]) < TOLERANCE):
-        return True
-    else:
-        return False"""
+if __name__ == "__main__":
+    main()
